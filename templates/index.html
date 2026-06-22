@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inkwell — Handwriting Recognition</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;1,400&family=Caveat:wght@500;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --paper: #f6f1e6;
+    --paper-dark: #ece4d3;
+    --ink: #1c2541;
+    --ink-soft: #3a4366;
+    --rule: #c9bfa8;
+    --accent: #a3372f;
+    --accent-soft: #d97f63;
+    --margin-rule: #c2645c;
+    --success: #2f6f4f;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    background-image:
+      repeating-linear-gradient(
+        to bottom,
+        transparent 0px,
+        transparent 35px,
+        var(--rule) 35px,
+        var(--rule) 36px
+      );
+    color: var(--ink);
+    font-family: 'Source Serif 4', serif;
+    min-height: 100vh;
+    padding: 0;
+  }
+
+  .margin-line {
+    position: fixed;
+    top: 0;
+    left: 70px;
+    bottom: 0;
+    width: 1px;
+    background: var(--margin-rule);
+    opacity: 0.35;
+    z-index: 0;
+  }
+
+  .wrap {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 48px 56px 80px 96px;
+    position: relative;
+    z-index: 1;
+  }
+
+  header {
+    margin-bottom: 36px;
+  }
+
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 10px;
+  }
+
+  h1 {
+    font-family: 'Caveat', cursive;
+    font-size: 64px;
+    font-weight: 700;
+    margin: 0 0 6px 0;
+    color: var(--ink);
+    line-height: 1;
+  }
+
+  .subtitle {
+    font-size: 17px;
+    color: var(--ink-soft);
+    font-style: italic;
+    max-width: 560px;
+    line-height: 1.5;
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+    margin-top: 32px;
+  }
+
+  @media (max-width: 760px) {
+    .layout { grid-template-columns: 1fr; }
+    .wrap { padding: 32px 20px 60px 40px; }
+    .margin-line { left: 24px; }
+  }
+
+  .panel {
+    background: rgba(255,255,255,0.55);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: 28px;
+    position: relative;
+  }
+
+  .panel::before {
+    content: '';
+    position: absolute;
+    top: -1px; left: 18px;
+    width: 36px; height: 14px;
+    background: var(--accent-soft);
+    opacity: 0.5;
+    transform: rotate(-2deg);
+  }
+
+  .panel-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .mode-toggle {
+    display: flex;
+    gap: 4px;
+    background: var(--paper-dark);
+    border-radius: 20px;
+    padding: 3px;
+  }
+
+  .mode-toggle button {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    border: none;
+    background: transparent;
+    color: var(--ink-soft);
+    padding: 6px 14px;
+    border-radius: 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .mode-toggle button.active {
+    background: var(--ink);
+    color: var(--paper);
+  }
+
+  #canvas-container {
+    position: relative;
+    border: 2px solid var(--ink);
+    border-radius: 1px;
+    background: #fdfbf6;
+    box-shadow: 3px 3px 0 var(--rule);
+  }
+
+  canvas {
+    display: block;
+    cursor: crosshair;
+    touch-action: none;
+    width: 100%;
+    height: auto;
+  }
+
+  .canvas-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+  }
+
+  button.action {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    border: 1.5px solid var(--ink);
+    background: var(--paper);
+    color: var(--ink);
+    padding: 10px 18px;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  button.action:hover {
+    background: var(--ink);
+    color: var(--paper);
+  }
+
+  button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--paper);
+  }
+
+  button.primary:hover {
+    background: #82281f;
+    border-color: #82281f;
+  }
+
+  .hint {
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin-top: 14px;
+    font-style: italic;
+  }
+
+  /* Results panel */
+  .result-empty {
+    color: var(--ink-soft);
+    font-style: italic;
+    font-size: 15px;
+    padding: 40px 0;
+    text-align: center;
+  }
+
+  .big-prediction {
+    text-align: center;
+    padding: 12px 0 6px;
+  }
+
+  .big-char {
+    font-family: 'Caveat', cursive;
+    font-size: 120px;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1;
+    display: inline-block;
+  }
+
+  .big-word {
+    font-family: 'Caveat', cursive;
+    font-size: 72px;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1.1;
+    word-break: break-all;
+  }
+
+  .confidence-line {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--ink-soft);
+    text-align: center;
+    margin-top: 4px;
+  }
+
+  .topk-list {
+    margin-top: 24px;
+    border-top: 1px dashed var(--rule);
+    padding-top: 16px;
+  }
+
+  .topk-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+  }
+
+  .topk-char {
+    width: 22px;
+    text-align: center;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .topk-bar-bg {
+    flex: 1;
+    height: 8px;
+    background: var(--paper-dark);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .topk-bar-fill {
+    height: 100%;
+    background: var(--accent-soft);
+    border-radius: 4px;
+    transition: width 0.4s ease;
+  }
+
+  .topk-pct {
+    width: 48px;
+    text-align: right;
+    color: var(--ink-soft);
+  }
+
+  .char-detail-row {
+    display: flex;
+    justify-content: space-between;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--paper-dark);
+  }
+
+  .char-detail-row .ch {
+    font-weight: 600;
+    color: var(--accent);
+  }
+
+  footer {
+    margin-top: 56px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-soft);
+    letter-spacing: 0.04em;
+    border-top: 1px solid var(--rule);
+    padding-top: 18px;
+  }
+
+  .pulse {
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+  }
+</style>
+</head>
+<body>
+
+<div class="margin-line"></div>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">CNN · {{ dataset_name }} · {{ num_classes }} classes</div>
+    <h1>Inkwell</h1>
+    <div class="subtitle">Draw a character — or a short word — and watch a convolutional network read your handwriting, stroke by stroke.</div>
+  </header>
+
+  <div class="layout">
+    <div class="panel">
+      <div class="panel-label">
+        <span>Your handwriting</span>
+        <div class="mode-toggle">
+          <button id="mode-char" class="active">Character</button>
+          <button id="mode-word">Word</button>
+        </div>
+      </div>
+
+      <div id="canvas-container">
+        <canvas id="draw-canvas" width="560" height="280"></canvas>
+      </div>
+
+      <div class="canvas-actions">
+        <button class="action" id="clear-btn">Clear</button>
+        <button class="action primary" id="predict-btn">Recognize →</button>
+      </div>
+
+      <div class="hint" id="mode-hint">Draw a single digit or letter, centered in the box.</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-label"><span>Model's reading</span></div>
+      <div id="result-area">
+        <div class="result-empty">Draw something, then press Recognize.</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Model: CharCNN (Conv-BN-ReLU ×5, ~450K–2M params) · Trained on {{ dataset_name }} · Extendable to CRNN for full-line recognition
+  </footer>
+</div>
+
+<script>
+const canvas = document.getElementById('draw-canvas');
+const ctx = canvas.getContext('2d');
+let drawing = false;
+let lastX = 0, lastY = 0;
+let mode = 'character';
+
+function resizeCanvasBacking() {
+  // Keep a fixed internal resolution regardless of CSS scaling for crisp strokes
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = mode === 'word' ? 560 : 280;
+  canvas.height = 280;
+  clearCanvas();
+}
+
+function clearCanvas() {
+  ctx.fillStyle = '#fdfbf6';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.lineWidth = 16;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = '#1c2541';
+}
+
+function getPos(e) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  if (e.touches && e.touches.length) {
+    return {
+      x: (e.touches[0].clientX - rect.left) * scaleX,
+      y: (e.touches[0].clientY - rect.top) * scaleY
+    };
+  }
+  return {
+    x: (e.clientX - rect.left) * scaleX,
+    y: (e.clientY - rect.top) * scaleY
+  };
+}
+
+function startDraw(e) {
+  drawing = true;
+  const p = getPos(e);
+  lastX = p.x; lastY = p.y;
+  e.preventDefault();
+}
+
+function moveDraw(e) {
+  if (!drawing) return;
+  const p = getPos(e);
+  ctx.beginPath();
+  ctx.moveTo(lastX, lastY);
+  ctx.lineTo(p.x, p.y);
+  ctx.stroke();
+  lastX = p.x; lastY = p.y;
+  e.preventDefault();
+}
+
+function endDraw(e) {
+  drawing = false;
+  e.preventDefault();
+}
+
+canvas.addEventListener('mousedown', startDraw);
+canvas.addEventListener('mousemove', moveDraw);
+canvas.addEventListener('mouseup', endDraw);
+canvas.addEventListener('mouseleave', endDraw);
+canvas.addEventListener('touchstart', startDraw, {passive: false});
+canvas.addEventListener('touchmove', moveDraw, {passive: false});
+canvas.addEventListener('touchend', endDraw, {passive: false});
+
+document.getElementById('clear-btn').addEventListener('click', clearCanvas);
+
+document.getElementById('mode-char').addEventListener('click', () => {
+  mode = 'character';
+  document.getElementById('mode-char').classList.add('active');
+  document.getElementById('mode-word').classList.remove('active');
+  document.getElementById('mode-hint').textContent = 'Draw a single digit or letter, centered in the box.';
+  resizeCanvasBacking();
+});
+
+document.getElementById('mode-word').addEventListener('click', () => {
+  mode = 'word';
+  document.getElementById('mode-word').classList.add('active');
+  document.getElementById('mode-char').classList.remove('active');
+  document.getElementById('mode-hint').textContent = 'Write a short word — leave a little gap between letters.';
+  resizeCanvasBacking();
+});
+
+resizeCanvasBacking();
+
+function renderCharacterResult(data) {
+  const area = document.getElementById('result-area');
+  const pct = (data.confidence * 100).toFixed(1);
+  let html = `
+    <div class="big-prediction">
+      <span class="big-char">${escapeHtml(data.prediction)}</span>
+      <div class="confidence-line">${pct}% confident</div>
+    </div>
+    <div class="topk-list">
+  `;
+  for (const item of data.top_k) {
+    const p = (item.prob * 100).toFixed(1);
+    html += `
+      <div class="topk-row">
+        <div class="topk-char">${escapeHtml(item.char)}</div>
+        <div class="topk-bar-bg"><div class="topk-bar-fill" style="width:${p}%"></div></div>
+        <div class="topk-pct">${p}%</div>
+      </div>
+    `;
+  }
+  html += `</div>`;
+  area.innerHTML = html;
+}
+
+function renderWordResult(data) {
+  const area = document.getElementById('result-area');
+  let html = `
+    <div class="big-prediction">
+      <span class="big-word">${escapeHtml(data.text || '—')}</span>
+    </div>
+    <div class="topk-list">
+  `;
+  if (data.characters.length === 0) {
+    html += `<div class="result-empty">No characters detected — try drawing with thicker, more separated strokes.</div>`;
+  }
+  for (const c of data.characters) {
+    const p = (c.confidence * 100).toFixed(1);
+    html += `
+      <div class="char-detail-row">
+        <span class="ch">'${escapeHtml(c.char)}'</span>
+        <span>${p}% confidence</span>
+      </div>
+    `;
+  }
+  html += `</div>`;
+  area.innerHTML = html;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, m => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[m]));
+}
+
+document.getElementById('predict-btn').addEventListener('click', async () => {
+  const area = document.getElementById('result-area');
+  area.innerHTML = '<div class="result-empty pulse">Reading your handwriting…</div>';
+
+  const dataUrl = canvas.toDataURL('image/png');
+
+  try {
+    const resp = await fetch('/predict', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ image: dataUrl, mode: mode })
+    });
+    const data = await resp.json();
+
+    if (data.error) {
+      area.innerHTML = `<div class="result-empty">${escapeHtml(data.error)}</div>`;
+      return;
+    }
+
+    if (data.mode === 'word') {
+      renderWordResult(data);
+    } else {
+      renderCharacterResult(data);
+    }
+  } catch (err) {
+    area.innerHTML = `<div class="result-empty">Connection error: ${escapeHtml(err.message)}</div>`;
+  }
+});
+</script>
+
+</body>
+</html>
