@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+data/MNIST/
+data/EMNIST/
+*.egg-info/
+.DS_Store
